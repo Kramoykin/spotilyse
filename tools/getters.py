@@ -7,6 +7,7 @@
 
 
 import pandas as pd
+import numpy as np
 #import datetime
 from os.path import expanduser
 from itertools import zip_longest
@@ -95,9 +96,9 @@ def get_global_top(
             itms_list.extend(results['items'])
     
     # Create a dict for df construction
-    track_dict = {key : [] for key in ['id', 'name', 
-                                       'artist_id', 'artist_name', 
-                                       'track_popularity']}
+    track_dict = {key : [] for key in ['id', 'name']} 
+                                       #, 'artist_id', 'artist_name', 
+                                       #'track_popularity']}
     
     # Fill the tracks list with top songs
     for res in itms_list:
@@ -159,9 +160,9 @@ def get_country_top(
             itms_list.extend(results['items'])
     
     # Create a dict for df construction
-    track_dict = {key : [] for key in ['id', 'name', 
-                                       'artist_id', 'artist_name', 
-                                       'track_popularity']}
+    track_dict = {key : [] for key in ['id', 'name']} 
+                                       #, 'artist_id', 'artist_name', 
+                                       #'track_popularity']}
     
     # Fill the tracks list with top songs
     for res in itms_list:
@@ -169,9 +170,9 @@ def get_country_top(
             if res['track']['id'] not in track_dict['id']:
                 track_dict['id'].append(res['track']['id'])
                 track_dict['name'].append(res['track']['name'])
-                track_dict['artist_id'].append(res['track']['artists'][0]['id'])
-                track_dict['artist_name'].append(res['track']['artists'][0]['name'])
-                track_dict['track_popularity'].append(res['track']['popularity'])
+                #track_dict['artist_id'].append(res['track']['artists'][0]['id'])
+                #track_dict['artist_name'].append(res['track']['artists'][0]['name'])
+                #track_dict['track_popularity'].append(res['track']['popularity'])
     
     #Create a pandas df
     df = pd.DataFrame(track_dict)
@@ -291,7 +292,7 @@ def get_releases(
     
     return df
 
-def get_albums_tracks(
+def get_albums_tracks_old(
         spotify, 
         country = None,
         albums_ids = [],
@@ -415,6 +416,159 @@ def get_albums_tracks(
     df.to_csv(path + name + '.csv', index = False)    
     
     return df 
+
+def get_albums_tracks(
+        spotify, 
+        country = None,
+        albums_ids = [],
+        path = expanduser('~')
+        ): 
+    """
+    A function used to get the .csv file containing stopify new releases albums
+    for given country.
+    
+    Parameters
+    ----------
+    spotify : spotify.client.Spotify() instance
+        Spotify API client with valid credentials
+    country : str
+        ISO 3166-1 alpha-2 country code (default 'US')
+    album_ids : list of str
+        array with album ID's
+    path : str
+        path to the directory in which will be saved 
+        <country>.csv file (default os.path.expanduser('~') - user HOME dir)
+        
+    Returns
+    ----------
+    pandas.DataFrame
+        a dataframe with new track info for all albums from albums_ids
+    """
+    
+    itms_list = [] # list for all items from all top playlists
+    # fill items list
+    for id_ in albums_ids:
+        results = spotify.album_tracks(id_, limit = 50)
+        itms_list.extend(results['items'])
+        while results['next']:
+            results = spotify.next(results)
+            itms_list.extend(results['items'])
+            
+    # Create a dict for df construction
+    track_dict = {key : [] for key in ['id', 'name']} 
+    
+    # Fill the tracks list with top songs
+    for res in itms_list:
+        if res is not None:
+            if res['id'] not in track_dict['id']:
+                track_dict['id'].append(res['id'])
+                track_dict['name'].append(res['name'])
+    
+    #Create a pandas df
+    df = pd.DataFrame(track_dict)
+    
+    # Construct the name of a file
+    if country is None:
+        name = 'GLobal'
+    else:
+        name = country
+    
+    # Export dataframe to a csv file
+    df.to_csv(path + name + '.csv', index = False)    
+    
+    return df
+
+def get_tracks_info(
+        spotify, 
+        country = None,
+        tracks_ids = [],
+        path = expanduser('~')
+        ): 
+    """
+    A function used to get the .csv file containing various track information
+    based on the list of tracks ids.
+    
+    Parameters
+    ----------
+    spotify : spotify.client.Spotify() instance
+        Spotify API client with valid credentials
+    country : str
+        ISO 3166-1 alpha-2 country code (default 'US')
+    tracks_ids : list of str
+        array with track ID's
+    path : str
+        path to the directory in which will be saved 
+        <country>.csv file (default os.path.expanduser('~') - user HOME dir)
+        
+    Returns
+    ----------
+    pandas.DataFrame
+        a dataframe with new track info for all albums from albums_ids
+    """
+    # Chunkize list with ids because spotify.tracks() gen take just <= 50 elems
+    ids_chnkd_np = np.array_split(np.array(tracks_ids), len(tracks_ids) // 50 + 1) 
+    ids_chnkd = [list(array) for array in ids_chnkd_np]
+    
+    tracks_lst = [] # list of tracks
+    features_lst = [] # list of the tracks features
+    # fill the array from api calling
+    for chunk in ids_chnkd:
+        tracks_lst.extend(spotify.tracks(chunk)['tracks'])
+        features_lst.extend(spotify.audio_features(chunk))
+                
+    # Create a dict for tracks df construction
+    track_dict = {key : [] for key in ['id', 'name',
+                                       'artist_id', 'artist_name',
+                                       'popularity', 'release_date']}
+    
+    # Create dataframe with track features
+    df_f = pd.DataFrame(features_lst, columns = ['id', 'danceability', 'energy',
+                                       'key', 'loudness',
+                                       'mode', 'speechiness',
+                                       'acousticness', 'instrumentalness',
+                                       'liveness', 'valence', 
+                                       'tempo', 'duration_ms',
+                                       'time_signature'])
+    df_f = df_f.set_index('id')
+    
+    # Fill the tracks dict
+    for t in tracks_lst:
+        track_dict['id'].append(t['id'])
+        track_dict['name'].append(t['name'])
+        track_dict['artist_id'].append(t['artists'][0]['id'])
+        track_dict['artist_name'].append(t['artists'][0]['name'])
+        track_dict['popularity'].append(t['popularity'])
+        track_dict['release_date'].append(t['album']['release_date'])
+
+    # Create a dataframe with tracks general info
+    df_t = pd.DataFrame(track_dict)
+    df_t = df_t.set_index('id')
+    
+    # Merge two datasets by indexes
+    df = pd.merge(df_t, df_f, left_index=True, right_index=True)
+                  
+    return df
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # def get_albums_tracks(spotify, 
 #                      country = None,
