@@ -8,6 +8,9 @@ from tools.getters import get_tracks_info
 from tools.getters import get_artists_info
 from tools.utils import write_yaml
 from tools.utils import read_yaml
+from tools.inserters import insert_artist
+from tools.inserters import insert_track
+
 
 
 
@@ -60,3 +63,9 @@ df_a = get_artists_info(spotify,
                         country = 'RU',
                         artists_ids = df['artist_id'].tolist(),
                         path = expanduser('~') + '/Projects/spotilyse/data/artists/')
+
+insert_artist(df_a)
+
+insert_track(df)
+
+
